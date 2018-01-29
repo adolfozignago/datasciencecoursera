@@ -1,0 +1,178 @@
+---
+title: "Analazing NOAAs Storm Database"
+author: "Adolfo Zignago"
+date: "1/29/2018"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+# Analazing NOAAs Storm DataBase: Impact in public health and economics problems
+#========================================
+
+## Synopsis
+Storms and other severe weather events can cause both public health and economic problems for communities and municipalities. 
+
+The basic goal of this analysis is to explore the NOAA Storm Database and answer some basic questions about severe weather events. 
+
+1. Across the United States, which types of events (as indicated in the  variable) are most harmful with respect to population health?
+2. Across the United States, which types of events have the greatest economic consequences?
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+### Data Processing
+
+1. Download file
+```{r Download file}
+fileURL = "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+fileDest = "StormData.csv.bz2"
+if(!file.exists(fileDest)) {
+        download.file(fileURL, fileDest, method = "curl", mode = "wb")
+}
+```
+
+2. Uncompress and load the file
+```{r uncompress file}
+dataFile <- bzfile(fileDest)
+stormData <- read.csv(dataFile, stringsAsFactors=F)
+```
+
+3. Check and verify the data
+``` {r check the data}
+dim(stormData)
+str(stormData)
+colnames(stormData)
+```
+
+```{r verify data, results='hide'}
+head(stormData)
+tail(stormData)
+summary(stormData)
+```
+
+
+### Question 1: Across the United States, which types of events (as indicated in the  variable) are most harmful with respect to population health?
+
+
+### Data Analysis
+```{r Subset Fatalities and Injuries}
+library(ggplot2)
+stormDataDS <- stormData[, c("EVTYPE","FATALITIES","INJURIES")]
+stormDataPH <- aggregate(stormDataDS[, c("FATALITIES", "INJURIES")], by=list(stormDataDS$EVTYPE), FUN = sum, na.rm = T)
+colnames(stormDataPH)[1] <- c("EVTYPE")
+
+stormDataPHbyFatalities <- stormDataPH[order(-stormDataPH[, "FATALITIES"]), ][1:10, ]
+stormDataPHbyInjuries <- stormDataPH[order(-stormDataPH[, "INJURIES"]), ][1:10, ]
+
+```
+
+- The `r stormDataPHbyFatalities[1, "EVTYPE"]` is the most event with `r stormDataPHbyFatalities[1, "FATALITIES"]` fatalities
+
+```{r Plot Fatalities, results = 'hide'}
+fatalities <- ("./images/fatalities.png")
+png(fatalities, height = 480, width = 480)
+ggplot(stormDataPHbyFatalities, aes(x = EVTYPE, y = FATALITIES)) + 
+    geom_bar(stat = "identity", fill = "blue") + 
+    theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
+    xlab("Event Type") + ylab("Total") + ggtitle("Top 10 Weather Events FATALITIES")
+dev.off()
+```
+
+```{r echo=FALSE, out.width='50%'}
+knitr::include_graphics(fatalities)
+```
+
+- The `r stormDataPHbyInjuries[1, "EVTYPE"]` is the most event with `r as.character(stormDataPHbyInjuries[1, "INJURIES"])` injuries
+
+```{r Plot Injuries, results = 'hide'}
+injuries <- ("./images/injuries.png")
+png(injuries, height = 480, width = 480)
+ggplot(stormDataPHbyInjuries, aes(x = EVTYPE, y = INJURIES)) + 
+    geom_bar(stat = "identity", fill = "green") + 
+    theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
+    xlab("Event Type") + ylab("Total") + ggtitle("Top 10 Weather Events INJURIES")
+dev.off()
+```
+
+```{r echo=FALSE, out.width='50%'}
+knitr::include_graphics(injuries)
+```
+
+``` {r Show plot1 with the analysis,  results = 'hide' }
+stormDataPHTotal <- with(stormDataDS, (aggregate(FATALITIES + INJURIES ~ EVTYPE, data = stormDataDS, FUN=sum, na.rm=T)))
+colnames(stormDataPHTotal) <- c("EVTYPE", "TOTAL")
+stormDataPHFI <- stormDataPHTotal[order(-stormDataPHTotal[, "TOTAL"]), ][1:10, ]
+
+plot1 <- ("./images/plot1.png")
+png(plot1, height = 480, width = 480)
+ggplot(stormDataPHFI, aes(x = EVTYPE, y = TOTAL)) + 
+    geom_bar(stat = "identity", fill = "red") + 
+    theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
+    xlab("Event Type") + ylab("Total") + ggtitle("Top 10 Weather Events (FATALITIES + INJURIES)")
+dev.off()
+
+```
+
+### Results
+
+- The `r stormDataPHbyInjuries[1, "EVTYPE"]` is the most event with `r as.character(stormDataPHFI[1, "TOTAL"])` fatalities + injuries
+
+```{r echo=FALSE, out.width='50%'}
+knitr::include_graphics(plot1)
+```
+
+### Question 2: Across the United States, which types of events have the greatest economic consequences?
+
+The following point are the same as the question 1.
+### Data Processing
+1. Download file
+2. Uncompress and load the file
+3. Check and verify the data
+
+### Data Analysis
+```{r subset of CROPDMGEXP and PROPDMGEXP as metioned on pdf National Weather ServiceInstruction}
+stormDataDS <- stormData[,c("EVTYPE", "PROPDMG", "PROPDMGEXP", "CROPDMG", "CROPDMGEXP")]
+#Calculate the values for Property Damages
+stormDataDS$PROPDMGNUM = 0
+stormDataDS[stormDataDS$PROPDMGEXP == "H", ]$PROPDMGNUM = stormDataDS[stormDataDS$PROPDMGEXP == "H", ]$PROPDMG * 10^2
+stormDataDS[stormDataDS$PROPDMGEXP == "K", ]$PROPDMGNUM = stormDataDS[stormDataDS$PROPDMGEXP == "K", ]$PROPDMG * 10^3
+stormDataDS[stormDataDS$PROPDMGEXP == "M", ]$PROPDMGNUM = stormDataDS[stormDataDS$PROPDMGEXP == "M", ]$PROPDMG * 10^6
+stormDataDS[stormDataDS$PROPDMGEXP == "B", ]$PROPDMGNUM = stormDataDS[stormDataDS$PROPDMGEXP == "B", ]$PROPDMG * 10^9
+
+
+# Calculate values for Crop Damage
+stormDataDS$CROPDMGNUM = 0
+stormDataDS[stormDataDS$CROPDMGEXP == "H", ]$CROPDMGNUM = stormDataDS[stormDataDS$CROPDMGEXP == "H", ]$CROPDMG * 10^2
+stormDataDS[stormDataDS$CROPDMGEXP == "K", ]$CROPDMGNUM = stormDataDS[stormDataDS$CROPDMGEXP == "K", ]$CROPDMG * 10^3
+stormDataDS[stormDataDS$CROPDMGEXP == "M", ]$CROPDMGNUM = stormDataDS[stormDataDS$CROPDMGEXP == "M", ]$CROPDMG * 10^6
+stormDataDS[stormDataDS$CROPDMGEXP == "B", ]$CROPDMGNUM = stormDataDS[stormDataDS$CROPDMGEXP == "B", ]$CROPDMG * 10^9
+
+
+# Aggregate the sum of both Property and Crop Damage
+stormDataETotal <- with(stormDataDS, (aggregate(PROPDMGNUM + CROPDMGNUM ~ EVTYPE, data = stormDataDS, FUN=sum, na.rm=T)))
+colnames(stormDataETotal) <- c("EVTYPE", "TOTAL")
+
+stormDataEPC <- stormDataETotal[order(-stormDataETotal[, "TOTAL"]), ][1:10, ]
+```
+
+```{r Show plot2 with the analysis, results = 'hide'}
+plot2 <- ("./images/plot2.png")
+png(plot2, height = 480, width = 480)
+ggplot(stormDataEPC, aes(x = EVTYPE, y = (TOTAL)/10^9)) + 
+    geom_bar(stat = "identity", fill = "red") + 
+    theme(axis.text.x = element_text(angle = 90, hjust = 1)) + 
+    xlab("Event Type") + ylab("Total Damage US$ Billion") + ggtitle("Top 10 Weather Events (PROPERTY AND CROP Damage)")
+dev.off()
+```
+
+### Results
+
+- The `r stormDataEPC[1, "EVTYPE"]` is the most event with `r round(stormDataEPC[1, "TOTAL"]/10^9,2)` US$ Billion in Property and Crop damage
+
+```{r echo=FALSE, out.width='50%'}
+knitr::include_graphics(plot2)
+```
+
