@@ -1,0 +1,192 @@
+---
+title: "Prediction Assignment Writeup"
+author: "Adolfo Zignago"
+date: "2/8/2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r loading libraries, message=FALSE}
+library(caret)
+library(ggplot2)
+library(ggcorrplot)
+library(tree)
+```
+# Backgound
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: [See the website](http://groupware.les.inf.puc-rio.br/har) (see the section on the Weight Lifting Exercise Dataset).
+
+# Introduction
+
+The goal of your project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set. You may use any of the other variables to predict with. You should create a report describing how you built your model, how you used cross validation, what you think the expected out of sample error is, and why you made the choices you did. You will also use your prediction model to predict 20 different test cases.
+
+## Data
+
+The training data for this project are available here:
+(https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv)
+
+The test data are available here:
+(https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv)
+
+The data for this project come from this source: (http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har).
+
+### Read Raw Data
+
+```{r download training and testing data}
+URLtraining = "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+URLtesting = "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+CSVtraining = "pml-training.csv"
+CSVtesting = "pml-testing.csv"
+
+if(!file.exists(CSVtraining)) {
+        download.file(URLtraining, CSVtraining, method = "curl")
+}
+
+if(!file.exists(CSVtesting)) {
+        download.file(URLtesting, CSVtesting, method = "curl")
+}
+
+DATAtraining <- read.csv(CSVtraining, na.strings=c("NA","#DIV/0!",""))
+DATAtesting <- read.csv(CSVtesting, na.strings=c("NA","#DIV/0!",""))
+
+dim(DATAtraining)
+dim(DATAtesting)
+```
+
+Reading the file from the URL was the best way to remove all those values.
+
+### Processing and Cleaning Data
+
+```{r verify training and testing data, results = 'hide'}
+# Verify the data
+str(DATAtraining)
+summary(DATAtraining)
+
+# Varify the data
+str(DATAtesting)
+summary(DATAtesting)
+```
+
+Both datasets have 160 variables, but verifying the data with str and summary, we notice that there ara NA values. We must to take off those columns.
+
+```{r Remove NA columns}
+# Remove columns with NA values
+DATAtraining <- DATAtraining[,sapply(DATAtraining,function(x) !any(is.na(x)))]
+
+trainingDATA <- DATAtraining[,c(names(DATAtraining[,8:59]),"classe")]
+
+
+# Remove columns with NA values
+DATAtesting <- DATAtesting[,sapply(DATAtesting,function(x) !any(is.na(x)))]
+
+testingDATA <- DATAtesting[,c(names(DATAtesting[,8:59]),"problem_id")]
+
+dim(trainingDATA)
+dim(testingDATA)
+```
+
+After the cleaning process, our data is ready. We taked off 107 variables with '', #DIV/0! and NA values. We have removed columns that do not provide important information for this analysis. Such, names, dates, times, etc.
+
+### Partition Data - Cross Validation
+
+For our model and perform a cross validation, we must create a partition. The most recommended is 60% / 40%. That is, 40% of our training data, will be our new testing data.
+
+```{r Partition data}
+set.seed(09022018)
+trainSet <- createDataPartition(y=trainingDATA$classe, p=0.60, list=FALSE)
+training60 <- trainingDATA[trainSet, ] 
+testing40<- trainingDATA[-trainSet, ]
+
+dim(training60)
+dim(testing40)
+```
+
+## Prediction Model
+
+###1 Random Forest
+
+```{r Random Forest}
+controlrf <- trainControl(method="cv", 5)
+rf_model <- train(classe ~ ., data=training60, method="rf", trControl=controlrf, ntree=250)
+rf_model
+```
+
+The result of the prediction must be compared with the information of the current testing data.
+
+```{r Compared models RF}
+rf_predict <- predict(rf_model, testing40)
+rf_confmatrix <- confusionMatrix(testing40$classe, rf_predict)
+rf_confmatrix
+```
+
+```{r Accuracy Random Forest}
+rf_acc <- postResample(rf_predict, testing40$classe)
+rf_err<-1 - as.numeric(confusionMatrix(testing40$classe, rf_predict)$overall[1])
+ 
+rf_acc
+rf_err
+```
+
+###2 GBM (Generalized Boosted Model)
+
+```{r GBM}
+controlgbm <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+gbm_model  <- train(classe ~ ., data=training60, method = "gbm",
+                trControl = controlgbm, verbose = FALSE)
+gbm_model
+```
+
+The result of the prediction must be compared with the information of the current testing data.
+
+```{r Compared models GBM}
+gbm_predict <- predict(gbm_model, testing40)
+gbm_confmatrix <- confusionMatrix(testing40$classe, gbm_predict)
+gbm_confmatrix
+```
+
+```{r Accuracy GBM}
+gbm_acc <- postResample(gbm_predict, testing40$classe)
+gbm_err<-1 - as.numeric(confusionMatrix(testing40$classe, gbm_predict)$overall[1])
+ 
+gbm_acc
+gbm_err
+```
+
+Random Forest has accuracy of: <b>`r rf_acc[1]`</b> and GBM has <b>`r gbm_acc[1]`</b>. We decided to apply Random Forest to predict the 20 observations results (testingDATA) as shown below.
+
+
+## Predict Results (Test Data)
+```{r Predict test Data}
+final <- predict(rf_model, testingDATA)
+final
+```
+
+
+# Apendix
+
+## Correlation 
+```{r Correlation}
+corr_model <- cor(testing40[, -53])
+ggcorrplot(corr_model, hc.order = TRUE, type = "lower",
+     outline.col = "white")
+```
+
+## Plot Random Forest
+```{r Plot Ramdom Forest}
+tr_rfmodel <- tree(classe ~., data = testing40)
+tr_rfmodel
+plot(tr_rfmodel)
+
+# Importance
+plot(varImp(rf_model, scale = TRUE))
+```
+
+## Plot GBM 
+```{r Plot GBM}
+plot(gbm_model)
+```
+
